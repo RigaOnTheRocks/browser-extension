@@ -1,6 +1,8 @@
 import { useStorageAsync, StorageLikeAsync } from '@vueuse/core';
 import { storage } from 'webextension-polyfill';
 
+import { parseStoredValue } from '@/helpers/storage';
+
 const browserStorageLocal: StorageLikeAsync = {
   removeItem(key: string) {
     return storage.local.remove(key);
@@ -17,7 +19,14 @@ const browserStorageLocal: StorageLikeAsync = {
 };
 
 const useBrowserStorageLocal = <T>(key: string, initialValue: T) => {
-  return useStorageAsync(key, initialValue, browserStorageLocal);
+  return useStorageAsync<T>(key, initialValue, browserStorageLocal, {
+    // A stored value that cannot be used, such as a null left over from an
+    // interrupted write, would otherwise reach the components as is
+    serializer: {
+      read: (raw: string) => parseStoredValue<T>(raw, initialValue),
+      write: (value: T) => JSON.stringify(value),
+    },
+  });
 };
 
 export default useBrowserStorageLocal;

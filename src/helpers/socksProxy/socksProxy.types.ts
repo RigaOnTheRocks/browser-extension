@@ -36,6 +36,10 @@ export type ProxyDetails = {
   city?: string;
   server?: string;
   proxyDNS?: boolean;
+  /** Whether the subdomains of the host it is set on are covered too.
+   * Absent on the proxies configured before this was an option, which all
+   * covered the subdomains. */
+  includeSubdomains?: boolean;
 };
 
 export type ProxyDetailsMap = {
@@ -49,10 +53,25 @@ export interface ProxyOperationArgs {
   hostname: string;
   ipv4_address: string;
   port?: number;
+  includeSubdomains?: boolean;
 }
 
 export interface RequestDetails extends browser.proxy._OnRequestDetails {
   // frameAncestors is not documented but exists and can be reasonably relied on
   // See: https://developer.mozilla.org/en-US/docs/Mozilla/Add-ons/WebExtensions/API/proxy/RequestDetails
   frameAncestors?: Array<{ frameId: number; url: string }>;
+}
+
+export enum ProxyScope {
+  /** The proxy applies to the registrable domain and all of its subdomains. */
+  domain = 'domain',
+  /** The proxy applies to the exact hostname only. */
+  host = 'host',
+}
+
+export enum RandomProxyScope {
+  /** Random proxies replace every domain and global selection. */
+  override = 'override',
+  /** Random proxies only apply to domains without a selection of their own. */
+  unselected = 'unselected',
 }

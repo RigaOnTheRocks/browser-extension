@@ -1,5 +1,7 @@
 import { checkDomain } from '@/helpers/domain';
-import { ProxyDetails } from '@/helpers/socksProxy/socksProxy.types';
+import { coversSubdomains } from '@/helpers/socksProxy/coversSubdomains';
+import { ProxyDetails, ProxyDetailsMap } from '@/helpers/socksProxy/socksProxy.types';
+import { parseStoredValue } from '@/helpers/storage';
 
 export const reloadMatchingTabs = async (url: string) => {
   const urlPattern = `*://*.${url}/*`;
@@ -52,37 +54,29 @@ export const getActiveTabDetails = async () => {
   };
 };
 
-export const getActiveProxyDetails = async () => {
-  const globalProxyDetails = await getGlobalProxyDetails();
-  const { hostProxiesDetails } = await browser.storage.local.get('hostProxiesDetails');
+export const getActiveProxyDetails = async (tab?: browser.tabs.Tab): Promise<ProxyDetails> => {
+  const stored = await browser.storage.local.get(['globalProxyDetails', 'hostProxiesDetails']);
+  const globalProxyDetails = parseStoredValue<ProxyDetails>(stored.globalProxyDetails, {
+    socksEnabled: false,
+  });
+  const hostProxiesDetails = parseStoredValue<ProxyDetailsMap>(stored.hostProxiesDetails, {});
 
-  if (hostProxiesDetails) {
-    const hostProxiesDetailsParsed = JSON.parse(hostProxiesDetails);
-    const activeTab = await getActiveTab();
-    const tabHost = new URL(activeTab.url!).hostname;
-    const { domain } = checkDomain(tabHost);
+  // The caller often knows the tab already, which saves a query
+  const activeTab = tab ?? (await getActiveTab());
+  const tabHost = activeTab?.url ? new URL(activeTab.url).hostname : '';
+  const { domain } = checkDomain(tabHost);
 
-    // Check subdomain proxy first
-    if (hostProxiesDetailsParsed[tabHost]?.socksEnabled) {
-      return hostProxiesDetailsParsed[tabHost];
-    }
+  // Check subdomain proxy first
+  if (hostProxiesDetails[tabHost]?.socksEnabled) {
+    return hostProxiesDetails[tabHost];
+  }
 
-    // Then check domain proxy
-    if (hostProxiesDetailsParsed[domain]?.socksEnabled) {
-      return hostProxiesDetailsParsed[domain];
-    }
+  // Then check domain proxy, when it reaches the subdomains
+  if (hostProxiesDetails[domain]?.socksEnabled && coversSubdomains(hostProxiesDetails[domain])) {
+    return hostProxiesDetails[domain];
   }
 
   return globalProxyDetails;
-};
-
-const getGlobalProxyDetails = async (): Promise<ProxyDetails> => {
-  const response = await browser.storage.local.get('globalProxyDetails');
-
-  if ('globalProxyDetails' in response) {
-    return JSON.parse(response.globalProxyDetails);
-  }
-  return { socksEnabled: false };
 };
 
 export const getActiveTab = async () => {
