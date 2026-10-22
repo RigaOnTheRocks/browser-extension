@@ -15,7 +15,8 @@ import useProxyHistory from '@/composables/useProxyHistory/useProxyHistory';
 import type { HistoryEntry } from '@/composables/useProxyHistory/HistoryEntries.types';
 import Countries from '@/components/Countries.vue';
 
-const { customProxyHost, customProxySelect, toggleLocations } = useLocations();
+const { customProxyHost, customProxyIncludeSubdomains, customProxySelect, toggleLocations } =
+  useLocations();
 const { clearFilter, filteredProxies, isError, error } = useSocksProxies();
 
 const { setCustomProxy, setGlobalProxy } = useSocksProxy();
@@ -42,7 +43,15 @@ const setProxy = ({ country, countryCode, city, hostname, ipv4_address, port }: 
 
   if (customProxySelect.value) {
     setCustomProxy(
-      { country, countryCode, city, hostname, ipv4_address, port },
+      {
+        country,
+        countryCode,
+        city,
+        hostname,
+        ipv4_address,
+        port,
+        includeSubdomains: customProxyIncludeSubdomains.value,
+      },
       customProxyHost.value,
     );
     customProxyHost.value = '';

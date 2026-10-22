@@ -6,10 +6,13 @@ import {
   ProxyDetails,
   ProxyInfoMap,
   ProxyInfo,
+  RandomProxyScope,
 } from '@/helpers/socksProxy/socksProxy.types';
 import { ConnCheckConfig, DEFAULT_CONFIG } from '@/helpers/config';
 import { checkDomain } from '@/helpers/domain';
+import { coversSubdomains } from '@/helpers/socksProxy/coversSubdomains';
 import { getRandomSessionProxy } from '@/helpers/socksProxy/getRandomSessionProxy';
+import { parseStoredValue } from '@/helpers/storage';
 import { getActiveTabDetails } from '@/helpers/tabs';
 
 // TODO decide what how to handle fallback proxy (if proxy is invalid, it will fallback to Firefox proxy if configured)
@@ -24,7 +27,9 @@ export const handleProxyRequest = async (details: browser.proxy._OnRequestDetail
       globalProxyDetails,
       hostProxies,
       hostProxiesDetails,
+      randomProxyDNS,
       randomProxyMode,
+      randomProxyScope,
     } = await getLocalStorageItems();
 
     const currentHost = new URL(details.url).hostname;
@@ -36,8 +41,13 @@ export const handleProxyRequest = async (details: browser.proxy._OnRequestDetail
     const isDomainProxied = Object.hasOwn(hostProxies, currentDomain);
     const isDomainProxydEnabled = Boolean(hostProxiesDetails[currentDomain]?.socksEnabled);
     const isParentDomainProxied = hasSubdomain && Object.hasOwn(hostProxies, domain);
-    const isParentProxyEnabled = hasSubdomain && Boolean(hostProxiesDetails[domain]?.socksEnabled);
+    const isParentProxyEnabled =
+      hasSubdomain &&
+      Boolean(hostProxiesDetails[domain]?.socksEnabled) &&
+      coversSubdomains(hostProxiesDetails[domain]);
     const isGlobalProxyEnabled = globalProxyDetails.socksEnabled;
+    const isRandomProxyOverriding =
+      randomProxyMode && randomProxyScope === RandomProxyScope.override;
 
     // 1. Block speculative requests, since we can't identify their origins
     if (details.type === 'speculative') {
@@ -56,16 +66,17 @@ export const handleProxyRequest = async (details: browser.proxy._OnRequestDetail
         isGlobalProxyEnabled,
         globalProxy,
         randomProxyMode,
+        randomProxyScope,
+        randomProxyDNS,
         excludedHosts,
         hostProxies,
         hostProxiesDetails,
       );
     }
 
-    // 4. Check for random proxy mode
-    // For now, overrides all other proxy settings
-    if (randomProxyMode) {
-      return getRandomSessionProxy(domain);
+    // 4. Check for random proxy mode, when set to override every selection
+    if (isRandomProxyOverriding) {
+      return getRandomSessionProxy(domain, randomProxyDNS);
     }
 
     // 5. Check domain/subdomain level
@@ -80,6 +91,12 @@ export const handleProxyRequest = async (details: browser.proxy._OnRequestDetail
     // 5b. Fallback to parent domain for subdomains (e.g., www.reddit.com -> reddit.com)
     if (isParentDomainProxied && isParentProxyEnabled) {
       return hostProxies[domain];
+    }
+
+    // 5c. Random proxy mode takes the place of the global proxy for the domains
+    // without a selection of their own
+    if (randomProxyMode) {
+      return getRandomSessionProxy(domain, randomProxyDNS);
     }
 
     // 6. Check global proxy
@@ -101,7 +118,9 @@ async function getLocalStorageItems(): Promise<{
   globalProxyDetails: ProxyDetails;
   hostProxies: ProxyInfoMap;
   hostProxiesDetails: Record<string, ProxyDetails>;
+  randomProxyDNS: boolean;
   randomProxyMode: boolean;
+  randomProxyScope: RandomProxyScope;
 }> {
   const data = await browser.storage.local.get([
     'connCheckConfig',
@@ -110,17 +129,21 @@ async function getLocalStorageItems(): Promise<{
     'globalProxyDetails',
     'hostProxies',
     'hostProxiesDetails',
+    'randomProxyDNS',
     'randomProxyMode',
+    'randomProxyScope',
   ]);
 
   return {
-    connCheckConfig: JSON.parse(data.connCheckConfig),
-    excludedHosts: JSON.parse(data.excludedHosts),
-    globalProxy: JSON.parse(data.globalProxy),
-    globalProxyDetails: JSON.parse(data.globalProxyDetails),
-    hostProxies: JSON.parse(data.hostProxies),
-    hostProxiesDetails: JSON.parse(data.hostProxiesDetails),
-    randomProxyMode: JSON.parse(data.randomProxyMode),
+    connCheckConfig: parseStoredValue(data.connCheckConfig, DEFAULT_CONFIG),
+    excludedHosts: parseStoredValue<string[]>(data.excludedHosts, []),
+    globalProxy: parseStoredValue(data.globalProxy, {} as ProxyInfo),
+    globalProxyDetails: parseStoredValue(data.globalProxyDetails, {} as ProxyDetails),
+    hostProxies: parseStoredValue<ProxyInfoMap>(data.hostProxies, {}),
+    hostProxiesDetails: parseStoredValue<Record<string, ProxyDetails>>(data.hostProxiesDetails, {}),
+    randomProxyDNS: parseStoredValue(data.randomProxyDNS, true),
+    randomProxyMode: parseStoredValue(data.randomProxyMode, false),
+    randomProxyScope: parseStoredValue(data.randomProxyScope, RandomProxyScope.override),
   };
 }
 
@@ -168,6 +191,8 @@ const getProxyForExtensionConnectionCheck = async (
   isGlobalProxyEnabled: boolean,
   globalProxy: ProxyInfo,
   randomProxyMode: boolean,
+  randomProxyScope: RandomProxyScope,
+  randomProxyDNS: boolean,
   excludedHosts: string[],
   hostProxies: ProxyInfoMap,
   hostProxiesDetails: Record<string, ProxyDetails>,
@@ -181,16 +206,20 @@ const getProxyForExtensionConnectionCheck = async (
   const isTabDomainProxied = Object.hasOwn(hostProxies, tabDomain);
   const isTabProxyEnabled = !!hostProxiesDetails[tabDomain]?.socksEnabled;
   const isParentDomainProxied = hasSubdomain && Object.hasOwn(hostProxies, domain);
-  const isParentProxyEnabled = hasSubdomain && !!hostProxiesDetails[domain]?.socksEnabled;
+  const isParentProxyEnabled =
+    hasSubdomain &&
+    !!hostProxiesDetails[domain]?.socksEnabled &&
+    coversSubdomains(hostProxiesDetails[domain]);
 
   // a) If the current tab is an about page, we only need to check for a global proxy
   if (isAboutPage) {
     return isGlobalProxyEnabled ? globalProxy : { type: 'direct' };
   }
 
-  // b) If random proxy mode is enabled, we need to check for the current tab's proxy
-  if (randomProxyMode) {
-    return getRandomSessionProxy(tabDomain);
+  // b) If random proxy mode overrides every selection, we need to check for the
+  // current tab's random proxy
+  if (randomProxyMode && randomProxyScope === RandomProxyScope.override) {
+    return getRandomSessionProxy(tabDomain, randomProxyDNS);
   }
 
   // c) If current tab domain is excluded, connection is direct
@@ -206,6 +235,11 @@ const getProxyForExtensionConnectionCheck = async (
   // d-b) Fallback to parent domain for subdomains (e.g., www.reddit.com -> reddit.com)
   if (isParentDomainProxied && isParentProxyEnabled) {
     return hostProxies[domain];
+  }
+
+  // d-c) Random proxy mode, for a tab domain without a selection of its own
+  if (randomProxyMode) {
+    return getRandomSessionProxy(tabDomain, randomProxyDNS);
   }
 
   // e) If global proxy is enabled

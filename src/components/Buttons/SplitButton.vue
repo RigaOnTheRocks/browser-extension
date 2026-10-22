@@ -16,6 +16,7 @@ type Props = {
   mainText?: string;
   subColor: string;
   subText: string;
+  subTitle?: string;
   href?: string;
   size?: 'small' | 'medium' | 'large';
 };
@@ -68,7 +69,12 @@ const buttonHeightClass = computed(() => {
         </Button>
       </template>
 
-      <Button :color="props.subColor" :size="$props.size" @click="handleSubClick">
+      <Button
+        :color="props.subColor"
+        :size="$props.size"
+        :title="props.subTitle"
+        @click="handleSubClick"
+      >
         {{ props.subText }}
       </Button>
     </n-popover>

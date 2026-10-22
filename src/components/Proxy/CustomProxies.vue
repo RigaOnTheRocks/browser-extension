@@ -1,23 +1,16 @@
 <script lang="ts" setup>
 import { computed, ref } from 'vue';
-import {
-  NCard,
-  NCheckbox,
-  NDivider,
-  NIcon,
-  NCollapseTransition,
-  NInput,
-  NSwitch,
-  NTooltip,
-} from 'naive-ui';
+import { NCard, NDivider, NIcon, NCollapseTransition, NInput, NSwitch, NTooltip } from 'naive-ui';
 
 import Button from '@/components/Buttons/Button.vue';
+import ProxySetting from '@/components/Proxy/ProxySetting.vue';
 import FeChevronDown from '@/components/Icons/FeChevronDown.vue';
 import FeChevronUp from '@/components/Icons/FeChevronUp.vue';
 import FeInfo from '@/components/Icons/FeInfo.vue';
 import SplitButton from '@/components/Buttons/SplitButton.vue';
 import TitleCategory from '@/components/TitleCategory.vue';
 
+import { coversSubdomains } from '@/helpers/socksProxy/coversSubdomains';
 import { isValidDomain, normalizeToFQDN } from '@/helpers/domain';
 
 import useSocksProxy from '@/composables/useSocksProxy';
@@ -29,15 +22,23 @@ const { excludedHosts, globalProxyDetails, hostProxiesDetails } = useStore();
 
 const {
   allowProxy,
+  globalProxyDNS,
   globalProxyEnabled,
   neverProxyHost,
   removeCustomProxy,
   removeGlobalProxy,
+  setGlobalProxyDNS,
+  setHostIncludeSubdomains,
+  setHostProxyDNS,
   toggleCustomProxy,
-  toggleCustomProxyDNS,
   toggleGlobalProxy,
-  toggleGlobalProxyDNS,
 } = useSocksProxy();
+
+const DNS_HINT =
+  'Checked: Mullvad resolves hostnames, through the proxy. Unchecked: this computer does.';
+
+const subdomainsHint = (host: string) =>
+  `Checked: ${host} and its subdomains. Unchecked: ${host} alone.`;
 
 const inputProxyDomain = ref('');
 const inputProxyDomainError = ref(false);
@@ -152,15 +153,14 @@ const clearError = () => {
             <h4 class="font-semibold">Server</h4>
             <div class="ml-2">{{ globalProxyDetails.server }}</div>
           </div>
-          <div class="flex items-center">
-            <h4 class="font-semibold pr-2">Proxy DNS</h4>
-            <n-checkbox
-              size="large"
-              :checked="globalProxyDetails.proxyDNS"
-              :focusable="false"
-              @update-checked="toggleGlobalProxyDNS"
-            />
-          </div>
+
+          <ProxySetting
+            class="mt-1"
+            label="Mullvad DNS"
+            :checked="globalProxyDNS"
+            :hint="DNS_HINT"
+            @update="setGlobalProxyDNS"
+          />
         </div>
 
         <div class="flex justify-between">
@@ -232,15 +232,21 @@ const clearError = () => {
               <h4 class="font-semibold">Server</h4>
               <div class="ml-2">{{ hostProxiesDetails[host].server }}</div>
             </div>
-            <div class="flex items-center">
-              <h4 class="font-semibold pr-2">Proxy DNS</h4>
-              <n-checkbox
-                size="large"
-                :checked="hostProxiesDetails[host].proxyDNS"
-                :focusable="false"
-                @update-checked="toggleCustomProxyDNS(host)"
-              />
-            </div>
+          </div>
+
+          <div v-if="hostProxiesDetails[host].server" class="flex flex-wrap gap-x-4 gap-y-1 mb-3">
+            <ProxySetting
+              label="Include all subdomains"
+              :checked="coversSubdomains(hostProxiesDetails[host])"
+              :hint="subdomainsHint(host)"
+              @update="setHostIncludeSubdomains(host, $event)"
+            />
+            <ProxySetting
+              label="Mullvad DNS"
+              :checked="hostProxiesDetails[host].proxyDNS ?? true"
+              :hint="DNS_HINT"
+              @update="setHostProxyDNS(host, $event)"
+            />
           </div>
 
           <div class="flex justify-between">

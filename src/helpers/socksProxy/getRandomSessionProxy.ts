@@ -18,7 +18,7 @@ export const browserStorage = {
   },
 };
 
-export async function getRandomSessionProxy(domain: string) {
+export async function getRandomSessionProxy(domain: string, proxyDNS = baseConfig.proxyDNS) {
   try {
     const { flatProxiesList } = await browserStorage.getLocal('flatProxiesList');
     const socksList: Array<SocksProxy> = JSON.parse(flatProxiesList);
@@ -32,7 +32,7 @@ export async function getRandomSessionProxy(domain: string) {
       const proxyInfo: ProxyInfo = {
         host: randomProxy.ipv4_address || socksIp,
         port: randomProxy.port,
-        proxyDNS: true,
+        proxyDNS,
         type: ProxyInfoType.socks,
       };
       domainProxyInfoMap[domain] = proxyInfo;
@@ -43,10 +43,14 @@ export async function getRandomSessionProxy(domain: string) {
         country: randomProxy.location.country,
         countryCode: addCountryCodeToProxy(randomProxy).location.countryCode,
         city: randomProxy.location.city,
-        proxyDNS: baseConfig.proxyDNS,
+        proxyDNS,
       };
       domainProxyDetailsMap[domain] = proxyDetails;
     }
+
+    // The DNS choice can change while the assigned proxy stays the same
+    domainProxyInfoMap[domain].proxyDNS = proxyDNS;
+    domainProxyDetailsMap[domain].proxyDNS = proxyDNS;
 
     return domainProxyInfoMap[domain];
   } catch (e) {
