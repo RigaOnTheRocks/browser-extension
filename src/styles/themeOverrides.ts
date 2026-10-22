@@ -1,5 +1,15 @@
 import { GlobalThemeOverrides } from 'naive-ui';
 
+// Floating panels, on the same palette as the cards they sit over
+const popover = {
+  color: 'var(--blue)',
+  textColor: 'var(--white)',
+  borderRadius: '8px',
+  fontSize: '0.875rem',
+  padding: '8px 12px',
+  boxShadow: '0 0 0 1px #354f6b, 0 4px 12px rgb(0 0 0 / 35%)',
+};
+
 export const themeOverrides: GlobalThemeOverrides = {
   common: {
     cardColor: 'rgba(41, 77, 115, 0.5)',
@@ -19,6 +29,9 @@ export const themeOverrides: GlobalThemeOverrides = {
   Switch: {
     railColorActive: 'var(--success)',
   },
+  Popover: popover,
+  // Tooltips are popovers wearing their own theme
+  Tooltip: { peers: { Popover: popover } },
   Checkbox: {
     colorChecked: 'var(--blue)',
     checkMarkColor: 'var(--success)',

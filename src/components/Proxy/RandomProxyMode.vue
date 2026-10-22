@@ -1,8 +1,9 @@
 <script lang="ts" setup>
 import { computed } from 'vue';
-import { NCard, NSwitch, NTooltip } from 'naive-ui';
+import { NCard, NDivider, NSwitch, NTooltip } from 'naive-ui';
 
 import IconLabel from '@/components/IconLabel.vue';
+import RandomProxySettings from '@/components/Proxy/RandomProxySettings.vue';
 import useStore from '@/composables/useStore';
 
 const { randomProxyMode } = useStore();
@@ -32,5 +33,9 @@ const randomProxyDescription = computed(() =>
     <div class="py-4 flex items-center">
       <IconLabel :text="randomProxyDescription" type="info" />
     </div>
+
+    <n-divider class="!mt-0 !mb-4" />
+
+    <RandomProxySettings />
   </n-card>
 </template>

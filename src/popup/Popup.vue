@@ -19,13 +19,15 @@ const {
   isMullvadDoh,
   dnsServers,
 } = useCheckDnsLeaks();
-const { randomProxyMode } = useRandomProxy();
+const { randomProxyMode, randomProxyOverrides } = useRandomProxy();
 const { globalProxyEnabled, currentHostProxyEnabled, currentHostExcluded } = useSocksProxy();
 
 const isProxyInUse = computed(
   () =>
-    !currentHostExcluded.value &&
-    !!(randomProxyMode.value || currentHostProxyEnabled.value || globalProxyEnabled.value),
+    // A random proxy overriding every selection also overrides the exclusions
+    randomProxyOverrides.value ||
+    (!currentHostExcluded.value &&
+      !!(randomProxyMode.value || currentHostProxyEnabled.value || globalProxyEnabled.value)),
 );
 </script>
 
